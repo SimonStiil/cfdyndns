@@ -181,7 +181,26 @@ type Cloudflare struct {
 	lastEnd        int64
 }
 
+func (c *Cloudflare) GetZoneFromDNS(dns string) error {
+	last := strings.LastIndex(dns, ".")
+	secondlast := strings.LastIndex(dns[:last-1], ".")
+	ZoneName := dns[secondlast+1:]
+	log.Printf("@D ZoneName: %v", ZoneName)
+	Zones, err := c.api.ListZones(c.context, ZoneName)
+	if err != nil {
+		return err
+	}
+	for _, Zone := range Zones {
+		fmt.Printf("@D %v: %v\n", Zone.ID, Zone.Name)
+	}
+	if len(Zones) == 1 {
+		c.config.Zone = Zones[0].ID
+	}
+	return nil
+}
+
 func (c *Cloudflare) Init() error {
+	c.context = context.Background()
 	if c.config == nil {
 		c.config = &CloudflareConfig{
 			Token:   os.Getenv(TOKEN_ENV),
@@ -191,23 +210,26 @@ func (c *Cloudflare) Init() error {
 	if len(c.config.Token) == 0 {
 		return errors.New(fmt.Sprintf("Cloudflare Token not defined in \"%s\"", TOKEN_ENV))
 	}
-	if len(c.config.Zone) == 0 {
-		return errors.New(fmt.Sprintf("Cloudflare Zone not defined in \"%s\"", ZONE_ENV))
-	}
-	if len(c.config.DNSName) == 0 {
-		return errors.New(fmt.Sprintf("DNS Name to update not defined in \"%s\"", DNS_NAME_ENV))
-	}
 	api, err := cloudflare.NewWithAPIToken(c.config.Token)
 	if err != nil {
 		return err
 	}
 	c.api = api
+	if len(c.config.DNSName) == 0 {
+		return errors.New(fmt.Sprintf("DNS Name to update not defined in \"%s\"", DNS_NAME_ENV))
+	}
+	if len(c.config.Zone) == 0 {
+		var err error
+		err = c.GetZoneFromDNS(c.config.DNSName)
+		if err != nil {
+			return errors.New(fmt.Sprintf("Cloudflare Zone not defined in \"%s\" and unable to get zone from dns name", ZONE_ENV))
+		}
+	}
 	c.zoneIdentifier = cloudflare.ZoneIdentifier(c.config.Zone)
 	c.searchRecord = cloudflare.ListDNSRecordsParams{
 		Type: "A",
 		Name: c.config.DNSName,
 	}
-	c.context = context.Background()
 	return nil
 }
 
