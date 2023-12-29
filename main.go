@@ -188,6 +188,7 @@ func (c *Cloudflare) GetZoneFromDNS(dns string) error {
 	log.Printf("@D ZoneName: %v", ZoneName)
 	Zones, err := c.api.ListZones(c.context, ZoneName)
 	if err != nil {
+		fmt.Printf("@E %+v\n", err)
 		return err
 	}
 	for _, Zone := range Zones {
@@ -222,7 +223,8 @@ func (c *Cloudflare) Init() error {
 		var err error
 		err = c.GetZoneFromDNS(c.config.DNSName)
 		if err != nil {
-			return errors.New(fmt.Sprintf("Cloudflare Zone not defined in \"%s\" and unable to get zone from dns name", ZONE_ENV))
+			errmessage := errors.New(fmt.Sprintf("Cloudflare Zone not defined in \"%s\" and unable to get zone from dns name", ZONE_ENV))
+			return errors.Join(err, errmessage)
 		}
 	}
 	c.zoneIdentifier = cloudflare.ZoneIdentifier(c.config.Zone)
