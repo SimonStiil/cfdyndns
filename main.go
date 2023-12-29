@@ -34,7 +34,11 @@ const (
 func main() {
 
 	e := new(Extip)
-	e.Init(log.Default())
+	if testingEnabled {
+		e.Init(log.Default())
+	} else {
+		e.Init(nil)
+	}
 	c := new(Cloudflare)
 	var err error
 	err = c.Init()
@@ -72,7 +76,9 @@ func main() {
 	for {
 		if nextTime.Before(time.Now()) {
 			setNextTime()
-			log.Println("@D Doing Update.")
+			if testingEnabled {
+				log.Println("@D Doing Update.")
+			}
 			if testingEnabled {
 				log.Println("@D Working with fake ip")
 				updated, err = e.IPChangedFake()
@@ -86,7 +92,9 @@ func main() {
 				health.ExternalIP = "UP"
 			}
 			if updated {
-				log.Println("@D IP Changed, Updating record.")
+				if testingEnabled {
+					log.Println("@D IP Changed, Updating record.")
+				}
 				err = c.UpdateRecord(e.LatestIP)
 				if err != nil {
 					health.Cloudflare = err.Error()
@@ -95,12 +103,15 @@ func main() {
 					health.Cloudflare = "UP"
 				}
 			}
-			log.Println("@D Update done.")
+			if testingEnabled {
+				log.Println("@D Update done.")
+			}
 		}
+		time.Sleep(time.Minute)
 	}
 }
 func setNextTime() {
-	nextTime = nextTime.Add(1 * time.Minute)
+	nextTime = nextTime.Add(10 * time.Minute)
 }
 
 type Health struct {
@@ -185,14 +196,18 @@ func (c *Cloudflare) GetZoneFromDNS(dns string) error {
 	last := strings.LastIndex(dns, ".")
 	secondlast := strings.LastIndex(dns[:last-1], ".")
 	ZoneName := dns[secondlast+1:]
-	log.Printf("@D ZoneName: %v", ZoneName)
+	if testingEnabled {
+		log.Printf("@D ZoneName: %v", ZoneName)
+	}
 	Zones, err := c.api.ListZones(c.context, ZoneName)
 	if err != nil {
 		fmt.Printf("@E %+v\n", err)
 		return err
 	}
-	for _, Zone := range Zones {
-		fmt.Printf("@D %v: %v\n", Zone.ID, Zone.Name)
+	if testingEnabled {
+		for _, Zone := range Zones {
+			fmt.Printf("@D %v: %v\n", Zone.ID, Zone.Name)
+		}
 	}
 	if len(Zones) == 1 {
 		c.config.Zone = Zones[0].ID
@@ -249,7 +264,9 @@ func (c *Cloudflare) UpdateRecord(ip net.IP) error {
 	c.lastBegin = time.Now().UnixMilli()
 	defer c.updateRecordEnd()
 	if c.recordID == "" {
-		log.Println("@D Looking up Record Identifier")
+		if testingEnabled {
+			log.Println("@D Looking up Record Identifier")
+		}
 		dnsList, _, err := c.api.ListDNSRecords(c.context, c.zoneIdentifier, c.searchRecord)
 		if err != nil {
 			log.Printf("@E error in CF ListDNSRecords:  %+v", err)
@@ -261,11 +278,15 @@ func (c *Cloudflare) UpdateRecord(ip net.IP) error {
 				token = "+"
 				c.recordID = record.ID
 			}
-			log.Printf("@D %s %s %s %s %+v %s \"%s\"\n", token, record.ID, record.Content, record.Name, *record.Proxied, record.Type, record.Comment)
+			if testingEnabled {
+				log.Printf("@D %s %s %s %s %+v %s \"%s\"\n", token, record.ID, record.Content, record.Name, *record.Proxied, record.Type, record.Comment)
+			}
 		}
 	}
 	if c.recordID == "" {
-		log.Println("@D No Preexisting record. Creating first Record")
+		if testingEnabled {
+			log.Println("@D No Preexisting record. Creating first Record")
+		}
 		record, err := c.api.CreateDNSRecord(
 			c.context,
 			c.zoneIdentifier,
@@ -278,7 +299,9 @@ func (c *Cloudflare) UpdateRecord(ip net.IP) error {
 			log.Printf("@E error in CF CreateDNSRecordParams: %+v", err)
 		}
 		c.recordID = record.ID
-		log.Printf("@D - %s %s %s %+v %s \"%s\"\n", record.ID, record.Content, record.Name, *record.Proxied, record.Type, record.Comment)
+		if testingEnabled {
+			log.Printf("@D - %s %s %s %+v %s \"%s\"\n", record.ID, record.Content, record.Name, *record.Proxied, record.Type, record.Comment)
+		}
 	} else {
 		comment := COMMENT
 		record, err := c.api.UpdateDNSRecord(
@@ -293,7 +316,9 @@ func (c *Cloudflare) UpdateRecord(ip net.IP) error {
 		if err != nil {
 			log.Printf("@E error in CF UpdateDNSRecord: %+v", err)
 		}
-		log.Printf("@D - %s %s %s %+v %s \"%s\"\n", record.ID, record.Content, record.Name, *record.Proxied, record.Type, record.Comment)
+		if testingEnabled {
+			log.Printf("@D - %s %s %s %+v %s \"%s\"\n", record.ID, record.Content, record.Name, *record.Proxied, record.Type, record.Comment)
+		}
 	}
 	return nil
 }
