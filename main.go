@@ -87,6 +87,8 @@ func main() {
 			}
 			if err != nil {
 				health.ExternalIP = err.Error()
+				log.Printf("@E : %+v\n", err)
+				extipErrors.Inc()
 				continue
 			} else {
 				health.ExternalIP = "UP"
@@ -98,6 +100,8 @@ func main() {
 				err = c.UpdateRecord(e.LatestIP)
 				if err != nil {
 					health.Cloudflare = err.Error()
+					log.Printf("@E : %+v\n", err)
+					cfErrors.Inc()
 					continue
 				} else {
 					health.Cloudflare = "UP"
@@ -124,6 +128,9 @@ func HealthActuator(w http.ResponseWriter, r *http.Request) {
 		requests.WithLabelValues(r.URL.EscapedPath(), r.Method).Inc()
 	}
 	w.Header().Set("Content-Type", "application/json")
+	if health.Cloudflare != "UP" && health.ExternalIP != "UP" {
+		w.WriteHeader(http.StatusBadRequest)
+	}
 	json.NewEncoder(w).Encode(health)
 	return
 }
@@ -161,6 +168,10 @@ var (
 		Name: "cfdyndns_extip_count",
 		Help: "Times getting last external ip",
 	})
+	extipErrors = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "cfdyndns_extip_errors",
+		Help: "Times getting errors while getting external ip",
+	})
 	cfTime = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "cfdyndns_cloudflare_time",
 		Help: "Time taken for updating cloudflare dns",
@@ -168,6 +179,10 @@ var (
 	cfCount = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "cfdyndns_cloudflare_count",
 		Help: "Times updating cloudflare dns",
+	})
+	cfErrors = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "cfdyndns_cloudflare_errors",
+		Help: "Times getting errors while updating cloudflare dns",
 	})
 	prometheusEnabled = false
 	health            = &Health{Cloudflare: "UP", ExternalIP: "UP"}
