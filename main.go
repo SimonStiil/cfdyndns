@@ -94,9 +94,7 @@ func main() {
 				health.ExternalIP = "UP"
 			}
 			if updated {
-				if testingEnabled {
-					log.Println("@D IP Changed, Updating record.")
-				}
+				log.Println("@I IP Changed, Updating record.")
 				err = c.UpdateRecord(e.LatestIP)
 				if err != nil {
 					health.Cloudflare = err.Error()
