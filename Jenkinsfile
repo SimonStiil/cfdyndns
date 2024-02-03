@@ -36,6 +36,7 @@ podTemplate(yaml: '''
     TreeMap scmData
     stage('checkout SCM') {  
       scmData = checkout scm
+      gitCommitMessage = sh(returnStdout: true, script: "git log --format=%B -n 1 ${scmData.GIT_COMMIT}").trim()
       gitMap = scmGetOrgRepo scmData.GIT_URL
       githubWebhookManager gitMap: gitMap, webhookTokenId: 'jenkins-webhook-repo-cleanup'
       // Non importaint comment
@@ -61,21 +62,22 @@ podTemplate(yaml: '''
         '''
       }
     }
-    stage('Build Docker Image') {
-      container('kaniko') {
-        def properties = readProperties file: 'package.env'
-        withEnv(["GIT_COMMIT=${scmData.GIT_COMMIT}", "PACKAGE_NAME=${properties.PACKAGE_NAME}", "PACKAGE_DESTINATION=${properties.PACKAGE_DESTINATION}", "GIT_BRANCH=${BRANCH_NAME}"]) {
-          if (isMainBranch()){
-            sh '''
-              /kaniko/executor --force --context `pwd` --log-format text --destination $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME --destination $PACKAGE_DESTINATION/$PACKAGE_NAME:latest --label org.opencontainers.image.description="Build based on https://github.com/SimonStiil/keyvaluedatabase/commit/$GIT_COMMIT" --label org.opencontainers.image.revision=$GIT_COMMIT --label org.opencontainers.image.version=$GIT_BRANCH
-            '''
-          } else {
-            sh '''
-              /kaniko/executor --force --context `pwd` --log-format text --destination $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME --label org.opencontainers.image.description="Build based on https://github.com/SimonStiil/keyvaluedatabase/commit/$GIT_COMMIT" --label org.opencontainers.image.revision=$GIT_COMMIT --label org.opencontainers.image.version=$GIT_BRANCH
-            '''
+    if ( !gitCommitMessage.startsWith("renovate/") || ! gitCommitMessage.startsWith("WIP") ) {
+      stage('Build Docker Image') {
+        container('kaniko') {
+          def properties = readProperties file: 'package.env'
+          withEnv(["GIT_COMMIT=${scmData.GIT_COMMIT}", "PACKAGE_NAME=${properties.PACKAGE_NAME}", "PACKAGE_DESTINATION=${properties.PACKAGE_DESTINATION}", "GIT_BRANCH=${BRANCH_NAME}"]) {
+            if (isMainBranch()){
+              sh '''
+                /kaniko/executor --force --context `pwd` --log-format text --destination $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME --destination $PACKAGE_DESTINATION/$PACKAGE_NAME:latest --label org.opencontainers.image.description="Build based on https://github.com/SimonStiil/cfdyndns/commit/$GIT_COMMIT" --label org.opencontainers.image.revision=$GIT_COMMIT --label org.opencontainers.image.version=$GIT_BRANCH
+              '''
+            } else {
+              sh '''
+                /kaniko/executor --force --context `pwd` --log-format text --destination $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME --label org.opencontainers.image.description="Build based on https://github.com/SimonStiil/cfdyndns/commit/$GIT_COMMIT" --label org.opencontainers.image.revision=$GIT_COMMIT --label org.opencontainers.image.version=$GIT_BRANCH
+              '''
+            }
           }
         }
-        
       }
     }
   }
