@@ -46,6 +46,12 @@ podTemplate(yaml: '''
       properties = readProperties file: 'package.env'
     }
     container('golang') {
+      stage('Get CA Certs') {
+        sh '''
+          apk --update add ca-certificates 
+          cp /etc/ssl/certs/ca-certificates.crt .
+        '''
+      }
       stage('UnitTests') {
         withEnv(['CGO_ENABLED=0']) {
           sh '''
