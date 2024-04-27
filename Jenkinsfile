@@ -17,6 +17,15 @@ podTemplate(yaml: '''
         volumeMounts:
         - name: kaniko-secret
           mountPath: /kaniko/.docker
+      - name: manifest-tool
+        image: mplatform/manifest-tool:alpine-v2.1.6
+        command:
+        - sleep
+        args: 
+        - 99d
+        volumeMounts:
+        - name: kaniko-secret
+          mountPath: /root/.docker
       - name: golang
         image: golang:alpine
         command:
