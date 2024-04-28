@@ -9,7 +9,7 @@ podTemplate(yaml: '''
     spec:
       containers:
       - name: kaniko
-        image: gcr.io/kaniko-project/executor:debug
+        image: gcr.io/kaniko-project/executor:v1.22.0-debug
         command:
         - sleep
         args: 
@@ -27,14 +27,12 @@ podTemplate(yaml: '''
         - name: kaniko-secret
           mountPath: /root/.docker
       - name: golang
-        image: golang:alpine
+        image: golang:1.22.2-alpine3.19
         command:
         - sleep
         args: 
         - 99d
       restartPolicy: Never
-      nodeSelector: 
-        kubernetes.io/arch: amd64
       volumes:
       - name: kaniko-secret
         secret:
