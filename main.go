@@ -15,7 +15,10 @@ import (
 	"time"
 
 	externalip "github.com/andygeorge/go-external-ip"
-	cloudflare "github.com/cloudflare/cloudflare-go"
+	"github.com/cloudflare/cloudflare-go/v2"
+	"github.com/cloudflare/cloudflare-go/v2/dns"
+	"github.com/cloudflare/cloudflare-go/v2/option"
+	"github.com/cloudflare/cloudflare-go/v2/zones"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -196,6 +199,7 @@ type CloudflareConfig struct {
 }
 type Cloudflare struct {
 	config         *CloudflareConfig
+	client         *cloudflare.Client
 	zoneIdentifier *cloudflare.ResourceContainer
 	api            *cloudflare.API
 	searchRecord   cloudflare.ListDNSRecordsParams
@@ -212,18 +216,20 @@ func (c *Cloudflare) GetZoneFromDNS(dns string) error {
 	if testingEnabled {
 		log.Printf("@D ZoneName: %v", ZoneName)
 	}
-	Zones, err := c.api.ListZones(c.context, ZoneName)
+	ZonesList, err := c.client.Zones.List(context.TODO(), zones.ZoneListParams{
+		Name: cloudflare.F(ZoneName),
+	})
 	if err != nil {
 		fmt.Printf("@E %+v\n", err)
 		return err
 	}
 	if testingEnabled {
-		for _, Zone := range Zones {
+		for _, Zone := range ZonesList.Result {
 			fmt.Printf("@D %v: %v\n", Zone.ID, Zone.Name)
 		}
 	}
-	if len(Zones) == 1 {
-		c.config.Zone = Zones[0].ID
+	if len(ZonesList.Result) == 1 {
+		c.config.Zone = ZonesList.Result[0].ID
 	}
 	return nil
 }
@@ -239,11 +245,7 @@ func (c *Cloudflare) Init() error {
 	if len(c.config.Token) == 0 {
 		return errors.New(fmt.Sprintf("Cloudflare Token not defined in \"%s\"", TOKEN_ENV))
 	}
-	api, err := cloudflare.NewWithAPIToken(c.config.Token)
-	if err != nil {
-		return err
-	}
-	c.api = api
+	c.client = cloudflare.NewClient(option.WithAPIToken(c.config.Token))
 	if len(c.config.DNSName) == 0 {
 		return errors.New(fmt.Sprintf("DNS Name to update not defined in \"%s\"", DNS_NAME_ENV))
 	}
@@ -280,6 +282,9 @@ func (c *Cloudflare) UpdateRecord(ip net.IP) error {
 		if testingEnabled {
 			log.Println("@D Looking up Record Identifier")
 		}
+		c.client.DNS.Records.List(c.context, dns.RecordListParams{
+			ZoneID: cloudflare.F("023e105f4ecef8ad9ca31a8372d0c353"),
+		})
 		dnsList, _, err := c.api.ListDNSRecords(c.context, c.zoneIdentifier, c.searchRecord)
 		if err != nil {
 			log.Printf("@E error in CF ListDNSRecords:  %+v", err)
