@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/andygeorge/go-external-ip v0.0.1
-	github.com/cloudflare/cloudflare-go v0.95.0
+	github.com/cloudflare/cloudflare-go v0.97.0
 	github.com/cloudflare/cloudflare-go/v2 v2.2.0
 )
 
@@ -22,10 +22,10 @@ require (
 )
 
 require (
-	github.com/goccy/go-json v0.10.2 // indirect
+	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
-	github.com/hashicorp/go-retryablehttp v0.7.5 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/prometheus/client_golang v1.19.1
 	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/text v0.15.0 // indirect
