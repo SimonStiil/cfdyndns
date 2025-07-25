@@ -2,7 +2,7 @@ module github.com/SimonStiil/cfdyndns
 
 go 1.23.0
 
-toolchain go1.24.2
+toolchain go1.24.5
 
 require github.com/andygeorge/go-external-ip v0.0.1
 
