@@ -15,7 +15,10 @@ import (
 	"time"
 
 	externalip "github.com/andygeorge/go-external-ip"
-	cloudflare "github.com/cloudflare/cloudflare-go"
+	"github.com/cloudflare/cloudflare-go/v4"
+	"github.com/cloudflare/cloudflare-go/v4/dns"
+	"github.com/cloudflare/cloudflare-go/v4/option"
+	"github.com/cloudflare/cloudflare-go/v4/zones"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -195,14 +198,12 @@ type CloudflareConfig struct {
 	DNSName string
 }
 type Cloudflare struct {
-	config         *CloudflareConfig
-	zoneIdentifier *cloudflare.ResourceContainer
-	api            *cloudflare.API
-	searchRecord   cloudflare.ListDNSRecordsParams
-	recordID       string
-	context        context.Context
-	lastBegin      int64
-	lastEnd        int64
+	config    *CloudflareConfig
+	client    *cloudflare.Client
+	recordID  string
+	context   context.Context
+	lastBegin int64
+	lastEnd   int64
 }
 
 func (c *Cloudflare) GetZoneFromDNS(dns string) error {
@@ -212,18 +213,19 @@ func (c *Cloudflare) GetZoneFromDNS(dns string) error {
 	if testingEnabled {
 		log.Printf("@D ZoneName: %v", ZoneName)
 	}
-	Zones, err := c.api.ListZones(c.context, ZoneName)
+	//		c.client.Zones.Get(c.context, option.WithZoneName(c.config.DNSName))
+	Zones, err := c.client.Zones.List(c.context, zones.ZoneListParams{Name: cloudflare.F(ZoneName)})
 	if err != nil {
 		fmt.Printf("@E %+v\n", err)
 		return err
 	}
 	if testingEnabled {
-		for _, Zone := range Zones {
+		for _, Zone := range Zones.Result {
 			fmt.Printf("@D %v: %v\n", Zone.ID, Zone.Name)
 		}
 	}
-	if len(Zones) == 1 {
-		c.config.Zone = Zones[0].ID
+	if len(Zones.Result) == 1 {
+		c.config.Zone = Zones.Result[0].ID
 	}
 	return nil
 }
@@ -239,11 +241,8 @@ func (c *Cloudflare) Init() error {
 	if len(c.config.Token) == 0 {
 		return errors.New(fmt.Sprintf("Cloudflare Token not defined in \"%s\"", TOKEN_ENV))
 	}
-	api, err := cloudflare.NewWithAPIToken(c.config.Token)
-	if err != nil {
-		return err
-	}
-	c.api = api
+	client := cloudflare.NewClient(option.WithAPIToken(c.config.Token))
+	c.client = client
 	if len(c.config.DNSName) == 0 {
 		return errors.New(fmt.Sprintf("DNS Name to update not defined in \"%s\"", DNS_NAME_ENV))
 	}
@@ -254,11 +253,6 @@ func (c *Cloudflare) Init() error {
 			errmessage := errors.New(fmt.Sprintf("Cloudflare Zone not defined in \"%s\" and unable to get zone from dns name", ZONE_ENV))
 			return errors.Join(err, errmessage)
 		}
-	}
-	c.zoneIdentifier = cloudflare.ZoneIdentifier(c.config.Zone)
-	c.searchRecord = cloudflare.ListDNSRecordsParams{
-		Type: "A",
-		Name: c.config.DNSName,
 	}
 	return nil
 }
@@ -280,57 +274,57 @@ func (c *Cloudflare) UpdateRecord(ip net.IP) error {
 		if testingEnabled {
 			log.Println("@D Looking up Record Identifier")
 		}
-		dnsList, _, err := c.api.ListDNSRecords(c.context, c.zoneIdentifier, c.searchRecord)
+		dnsList, err := c.client.DNS.Records.List(c.context, dns.RecordListParams{
+			Type:   cloudflare.F(dns.RecordListParamsTypeA),
+			Name:   cloudflare.F(dns.RecordListParamsName{Exact: cloudflare.F(c.config.DNSName)}),
+			ZoneID: cloudflare.F(c.config.Zone),
+		})
 		if err != nil {
 			log.Printf("@E error in CF ListDNSRecords:  %+v", err)
 			return err
 		}
-		for _, record := range dnsList {
+		for _, record := range dnsList.Result {
 			token := "-"
 			if record.Name == c.config.DNSName {
 				token = "+"
 				c.recordID = record.ID
 			}
 			if testingEnabled {
-				log.Printf("@D %s %s %s %s %+v %s \"%s\"\n", token, record.ID, record.Content, record.Name, *record.Proxied, record.Type, record.Comment)
+				log.Printf("@D %s %s %s %s %+v %s \"%s\"\n", token, record.ID, record.Content, record.Name, record.Proxied, record.Type, record.Comment)
 			}
 		}
+	}
+	record := dns.ARecordParam{
+		Name:    cloudflare.F(c.config.DNSName),
+		Proxied: cloudflare.Bool(false),
+		Type:    cloudflare.F(dns.ARecordTypeA),
+		Content: cloudflare.F(ip.String()),
+		Comment: cloudflare.F(COMMENT),
 	}
 	if c.recordID == "" {
 		if testingEnabled {
 			log.Println("@D No Preexisting record. Creating first Record")
 		}
-		record, err := c.api.CreateDNSRecord(
-			c.context,
-			c.zoneIdentifier,
-			cloudflare.CreateDNSRecordParams{Content: ip.String(),
-				Name:    c.config.DNSName,
-				Proxied: BoolPointer(false),
-				Type:    "A",
-				Comment: COMMENT})
+		record, err := c.client.DNS.Records.New(c.context, dns.RecordNewParams{
+			ZoneID: cloudflare.F(c.config.Zone),
+			Body:   record})
 		if err != nil {
 			log.Printf("@E error in CF CreateDNSRecordParams: %+v", err)
 		}
 		c.recordID = record.ID
 		if testingEnabled {
-			log.Printf("@D - %s %s %s %+v %s \"%s\"\n", record.ID, record.Content, record.Name, *record.Proxied, record.Type, record.Comment)
+			log.Printf("@D - %s %s %s %+v %s \"%s\"\n", record.ID, record.Content, record.Name, record.Proxied, record.Type, record.Comment)
 		}
 	} else {
-		comment := COMMENT
-		record, err := c.api.UpdateDNSRecord(
-			c.context,
-			c.zoneIdentifier,
-			cloudflare.UpdateDNSRecordParams{ID: c.recordID,
-				Content: ip.String(),
-				Name:    c.config.DNSName,
-				Proxied: BoolPointer(false),
-				Type:    "A",
-				Comment: &comment})
+		record, err := c.client.DNS.Records.Update(c.context, c.recordID, dns.RecordUpdateParams{
+			ZoneID: cloudflare.F(c.config.Zone),
+			Body:   record,
+		})
 		if err != nil {
 			log.Printf("@E error in CF UpdateDNSRecord: %+v", err)
 		}
 		if testingEnabled {
-			log.Printf("@D - %s %s %s %+v %s \"%s\"\n", record.ID, record.Content, record.Name, *record.Proxied, record.Type, record.Comment)
+			log.Printf("@D - %s %s %s %+v %s \"%s\"\n", record.ID, record.Content, record.Name, record.Proxied, record.Type, record.Comment)
 		}
 	}
 	return nil
