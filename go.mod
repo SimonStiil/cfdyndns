@@ -2,7 +2,7 @@ module github.com/SimonStiil/cfdyndns
 
 go 1.23.0
 
-toolchain go1.24.5
+toolchain go1.24.6
 
 require github.com/andygeorge/go-external-ip v0.0.1
 
@@ -22,6 +22,6 @@ require (
 )
 
 require (
-	github.com/cloudflare/cloudflare-go/v4 v4.6.0
-	github.com/prometheus/client_golang v1.22.0
+	github.com/cloudflare/cloudflare-go/v5 v5.0.0
+	github.com/prometheus/client_golang v1.23.0
 )
