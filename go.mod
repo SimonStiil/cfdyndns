@@ -22,7 +22,6 @@ require (
 )
 
 require (
-	github.com/cloudflare/cloudflare-go/v4 v4.6.0
 	github.com/cloudflare/cloudflare-go/v5 v5.0.0
 	github.com/prometheus/client_golang v1.23.0
 )

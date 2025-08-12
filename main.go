@@ -15,10 +15,10 @@ import (
 	"time"
 
 	externalip "github.com/andygeorge/go-external-ip"
-	"github.com/cloudflare/cloudflare-go/v4"
-	"github.com/cloudflare/cloudflare-go/v4/dns"
-	"github.com/cloudflare/cloudflare-go/v4/option"
-	"github.com/cloudflare/cloudflare-go/v4/zones"
+	"github.com/cloudflare/cloudflare-go/v5"
+	"github.com/cloudflare/cloudflare-go/v5/dns"
+	"github.com/cloudflare/cloudflare-go/v5/option"
+	"github.com/cloudflare/cloudflare-go/v5/zones"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -133,7 +133,6 @@ func HealthActuator(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	json.NewEncoder(w).Encode(health)
-	return
 }
 
 type FakeIPJson struct {
@@ -153,7 +152,6 @@ func GenerateFakeIP(w http.ResponseWriter, r *http.Request) {
 	fakeIP = newFakeIP
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(obj)
-	return
 }
 
 var (
@@ -239,18 +237,18 @@ func (c *Cloudflare) Init() error {
 			DNSName: os.Getenv(DNS_NAME_ENV)}
 	}
 	if len(c.config.Token) == 0 {
-		return errors.New(fmt.Sprintf("Cloudflare Token not defined in \"%s\"", TOKEN_ENV))
+		return fmt.Errorf("Cloudflare Token not defined in \"%s\"", TOKEN_ENV)
 	}
 	client := cloudflare.NewClient(option.WithAPIToken(c.config.Token))
 	c.client = client
 	if len(c.config.DNSName) == 0 {
-		return errors.New(fmt.Sprintf("DNS Name to update not defined in \"%s\"", DNS_NAME_ENV))
+		return fmt.Errorf("DNS Name to update not defined in \"%s\"", DNS_NAME_ENV)
 	}
 	if len(c.config.Zone) == 0 {
 		var err error
 		err = c.GetZoneFromDNS(c.config.DNSName)
 		if err != nil {
-			errmessage := errors.New(fmt.Sprintf("Cloudflare Zone not defined in \"%s\" and unable to get zone from dns name", ZONE_ENV))
+			errmessage := fmt.Errorf("Cloudflare Zone not defined in \"%s\" and unable to get zone from dns name", ZONE_ENV)
 			return errors.Join(err, errmessage)
 		}
 	}
@@ -340,7 +338,7 @@ type Extip struct {
 func (ip *Extip) IPChangedFake() (bool, error) {
 	ip.lastBegin = time.Now().UnixMilli()
 	defer ip.IPChangedEnd()
-	if bytes.Compare(ip.LatestIP, fakeIP) != 0 {
+	if !bytes.Equal(ip.LatestIP, fakeIP) {
 		ip.LatestIP = fakeIP
 		return true, nil
 	}
@@ -367,7 +365,7 @@ func (ip *Extip) IPChanged() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if bytes.Compare(ip.LatestIP, extip) != 0 {
+	if !bytes.Equal(ip.LatestIP, extip) {
 		ip.LatestIP = extip
 		return true, nil
 	}
