@@ -9,7 +9,7 @@ podTemplate(yaml: '''
     spec:
       containers:
       - name: kaniko
-        image: gcr.io/kaniko-project/executor:v1.24.0-debug
+        image: gcr.io/kaniko-project/executor:v1.24.0-debug # renovate
         command:
         - sleep
         args: 
@@ -18,7 +18,7 @@ podTemplate(yaml: '''
         - name: kaniko-secret
           mountPath: /kaniko/.docker
       - name: manifest-tool
-        image: mplatform/manifest-tool:alpine-v2.2.0
+        image: mplatform/manifest-tool:alpine-v2.2.0 # renovate
         command:
         - sleep
         args: 
@@ -27,7 +27,7 @@ podTemplate(yaml: '''
         - name: kaniko-secret
           mountPath: /root/.docker
       - name: golang
-        image: golang:1.24.3-alpine3.20
+        image: golang:1.24.3-alpine3.20 # renovate
         command:
         - sleep
         args: 

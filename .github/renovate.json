@@ -18,13 +18,15 @@
     }
   ],
   "separateMajorMinor": false,
-  "customManagers": [
+  "regexManagers": [
     {
-      "customType": "regex",
-      "fileMatch": ["(^|/)Jenkinsfile$"],
-      "matchStrings": ["\\simage: (?<depName>.*?):(?<currentValue>.*?)\\s"],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker"
+      "fileMatch": [
+        "(^|/)Jenkinsfile$"
+      ],
+      "matchStrings": [
+        "\\s*image:\\s*(?<depName>.*?):(?<currentValue>.*?)\\s*#\\s*renovate\\n"
+      ],
+      "datasourceTemplate": "docker"
     }
   ]
 }
