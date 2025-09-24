@@ -8,38 +8,50 @@ podTemplate(yaml: '''
     kind: Pod
     spec:
       containers:
-      - name: kaniko
-        image: gcr.io/kaniko-project/executor:v1.24.0-debug # renovate
+      - name: buildkit
+        image: moby/buildkit:v0.24.0-rootless # renovate
         command:
-        - sleep
-        args: 
-        - 99d
+        - /bin/sh
+        tty: true
         volumeMounts:
-        - name: kaniko-secret
-          mountPath: /kaniko/.docker
-      - name: manifest-tool
-        image: mplatform/manifest-tool:alpine-v2.2.0 # renovate
-        command:
-        - sleep
-        args: 
-        - 99d
-        volumeMounts:
-        - name: kaniko-secret
-          mountPath: /root/.docker
+        - name: docker-secret
+          mountPath: /home/user/.docker
+        - name: certs
+          mountPath: /certs/client
       - name: golang
-        image: golang:1.24.3-alpine3.20 # renovate
+        image: golang:1.25.1-alpine # renovate
         command:
         - sleep
         args: 
         - 99d
+        env:
+        - name: HOST_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - name: "golang-cache"
+          mountPath: "/root/.cache/"
+        - name: "golang-prgs"
+          mountPath: "/go/pkg/"
       restartPolicy: Never
       volumes:
-      - name: kaniko-secret
+      - name: docker-secret
         secret:
           secretName: github-dockercred
           items:
           - key: .dockerconfigjson
             path: config.json
+      - name: certs
+        secret:
+          secretName: buildkit-client-certs
+      - name: "golang-cache"
+        persistentVolumeClaim:
+          claimName: "golang-cache"
+      - name: "golang-prgs"
+        persistentVolumeClaim:
+          claimName: "golang-prgs"
 ''') {
   node(POD_LABEL) {
     TreeMap scmData
@@ -82,47 +94,22 @@ podTemplate(yaml: '''
       }
     }
     if ( !gitCommitMessage.startsWith("renovate/") || ! gitCommitMessage.startsWith("WIP") ) {
-      container('golang') {
-        stage('Generate Dockerfile AMD64') {
-          sh '''
-            ./dockerfilegen.sh amd64
-          '''
-        }
-      }
-      container('kaniko') {
-        stage('Build Docker Image AMD64') {
-          withEnv(["GIT_COMMIT=${scmData.GIT_COMMIT}", "PACKAGE_NAME=${properties.PACKAGE_NAME}", "PACKAGE_DESTINATION=${properties.PACKAGE_DESTINATION}", "PACKAGE_CONTAINER_SOURCE=${properties.PACKAGE_CONTAINER_SOURCE}", "GIT_BRANCH=${BRANCH_NAME}"]) {
+      container('buildkit') {
+        stage('Build Docker Image') {
+          withEnv(["GIT_COMMIT=${scmData.GIT_COMMIT}", "PACKAGE_NAME=${properties.PACKAGE_NAME}", "PACKAGE_CONTAINER_PLATFORMS=${properties.PACKAGE_CONTAINER_PLATFORMS}", "PACKAGE_DESTINATION=${properties.PACKAGE_DESTINATION}", "PACKAGE_CONTAINER_SOURCE=${properties.PACKAGE_CONTAINER_SOURCE}", "GIT_BRANCH=${BRANCH_NAME}"]) {
             sh '''
-                /kaniko/executor --force --context `pwd` --log-format text --destination $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME-amd64 --label org.opencontainers.image.description="Build based on $PACKAGE_CONTAINER_SOURCE/commit/$GIT_COMMIT" --label org.opencontainers.image.revision=$GIT_COMMIT --label org.opencontainers.image.version=$GIT_BRANCH
+              buildctl --addr 'tcp://buildkitd:1234'\
+              --tlscacert /certs/client/ca.crt \
+              --tlscert /certs/client/tls.crt \
+              --tlskey /certs/client/tls.key \
+              build \
+              --frontend dockerfile.v0 \
+              --opt filename=Dockerfile --opt platform=$PACKAGE_CONTAINER_PLATFORMS \
+              --local context=$(pwd) --local dockerfile=$(pwd) \
+              --import-cache $PACKAGE_DESTINATION/$PACKAGE_NAME:buildcache \
+              --export-cache $PACKAGE_DESTINATION/$PACKAGE_NAME:buildcache \
+              --output=type=image,name=$PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME,push=true,annotation.org.opencontainers.image.description="Build based on $PACKAGE_CONTAINER_SOURCE/commit/$GIT_COMMIT",annotation.org.opencontainers.image.revision=$GIT_COMMIT,annotation.org.opencontainers.image.version=$GIT_BRANCH,annotation.org.opencontainers.image.source="https://github.com/SimonStiil/cfdyndns",annotation.org.opencontainers.image.licenses=GPL-2.0-only
               '''
-          }
-        }
-      }
-      container('golang') {
-        stage('Generate Dockerfile ARM64') {
-          sh '''
-            ./dockerfilegen.sh arm64
-          '''
-        }
-      }
-      container('kaniko') {
-        stage('Build Docker Image ARM64') {
-          withEnv(["GIT_COMMIT=${scmData.GIT_COMMIT}", "PACKAGE_NAME=${properties.PACKAGE_NAME}", "PACKAGE_DESTINATION=${properties.PACKAGE_DESTINATION}", "PACKAGE_CONTAINER_SOURCE=${properties.PACKAGE_CONTAINER_SOURCE}", "GIT_BRANCH=${BRANCH_NAME}"]) {
-            sh '''
-                /kaniko/executor --force --context `pwd` --log-format text --custom-platform=linux/arm64 --destination $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME-arm64 --label org.opencontainers.image.description="Build based on $PACKAGE_CONTAINER_SOURCE/commit/$GIT_COMMIT" --label org.opencontainers.image.revision=$GIT_COMMIT --label org.opencontainers.image.version=$GIT_BRANCH
-              '''
-          }
-        }
-      }
-      container('manifest-tool') {
-        stage('Build combined manifest') {
-          sh 'echo $HOME && pwd && whoami'
-          withEnv(["GIT_COMMIT=${scmData.GIT_COMMIT}", "PACKAGE_NAME=${properties.PACKAGE_NAME}", "PACKAGE_DESTINATION=${properties.PACKAGE_DESTINATION}", "PACKAGE_CONTAINER_SOURCE=${properties.PACKAGE_CONTAINER_SOURCE}", "GIT_BRANCH=${BRANCH_NAME}"]) {
-            if (isMainBranch()){
-              sh 'manifest-tool push from-args --platforms linux/amd64,linux/arm64 --template $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME-ARCH --tags latest --target $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME'
-            } else {
-              sh 'manifest-tool push from-args --platforms linux/amd64,linux/arm64 --template $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME-ARCH --target $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME'
-            }
           }
         }
       }
