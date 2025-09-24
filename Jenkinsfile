@@ -19,7 +19,7 @@ podTemplate(yaml: '''
         - name: certs
           mountPath: /certs/client
       - name: golang
-        image: golang:1.24.3-alpine3.20 # renovate
+        image: golang:1.25.1-alpine # renovate
         command:
         - sleep
         args: 
@@ -96,7 +96,7 @@ podTemplate(yaml: '''
     if ( !gitCommitMessage.startsWith("renovate/") || ! gitCommitMessage.startsWith("WIP") ) {
       container('buildkit') {
         stage('Build Docker Image') {
-          withEnv(["GIT_COMMIT=${scmData.GIT_COMMIT}", "PACKAGE_NAME=${properties.PACKAGE_NAME}", "PACKAGE_DESTINATION=${properties.PACKAGE_DESTINATION}", "PACKAGE_CONTAINER_SOURCE=${properties.PACKAGE_CONTAINER_SOURCE}", "GIT_BRANCH=${BRANCH_NAME}"]) {
+          withEnv(["GIT_COMMIT=${scmData.GIT_COMMIT}", "PACKAGE_NAME=${properties.PACKAGE_NAME}", "PACKAGE_CONTAINER_PLATFORMS=${properties.PACKAGE_CONTAINER_PLATFORMS}", "PACKAGE_DESTINATION=${properties.PACKAGE_DESTINATION}", "PACKAGE_CONTAINER_SOURCE=${properties.PACKAGE_CONTAINER_SOURCE}", "GIT_BRANCH=${BRANCH_NAME}"]) {
             sh '''
               buildctl --addr 'tcp://buildkitd:1234'\
               --tlscacert /certs/client/ca.crt \
@@ -104,7 +104,7 @@ podTemplate(yaml: '''
               --tlskey /certs/client/tls.key \
               build \
               --frontend dockerfile.v0 \
-              --opt filename=Dockerfile --opt platform=linux/amd64,linux/arm64 \
+              --opt filename=Dockerfile --opt platform=$PACKAGE_CONTAINER_PLATFORMS \
               --local context=$(pwd) --local dockerfile=$(pwd) \
               --import-cache $PACKAGE_DESTINATION/$PACKAGE_NAME:buildcache \
               --export-cache $PACKAGE_DESTINATION/$PACKAGE_NAME:buildcache \
