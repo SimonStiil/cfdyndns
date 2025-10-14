@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,10 +14,10 @@ import (
 	"time"
 
 	externalip "github.com/andygeorge/go-external-ip"
-	"github.com/cloudflare/cloudflare-go/v5"
-	"github.com/cloudflare/cloudflare-go/v5/dns"
-	"github.com/cloudflare/cloudflare-go/v5/option"
-	"github.com/cloudflare/cloudflare-go/v5/zones"
+	"github.com/cloudflare/cloudflare-go/v6"
+	"github.com/cloudflare/cloudflare-go/v6/dns"
+	"github.com/cloudflare/cloudflare-go/v6/option"
+	"github.com/cloudflare/cloudflare-go/v6/zones"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -245,8 +244,7 @@ func (c *Cloudflare) Init() error {
 		return fmt.Errorf("DNS Name to update not defined in \"%s\"", DNS_NAME_ENV)
 	}
 	if len(c.config.Zone) == 0 {
-		var err error
-		err = c.GetZoneFromDNS(c.config.DNSName)
+		err := c.GetZoneFromDNS(c.config.DNSName)
 		if err != nil {
 			errmessage := fmt.Errorf("Cloudflare Zone not defined in \"%s\" and unable to get zone from dns name", ZONE_ENV)
 			return errors.Join(err, errmessage)
@@ -338,7 +336,7 @@ type Extip struct {
 func (ip *Extip) IPChangedFake() (bool, error) {
 	ip.lastBegin = time.Now().UnixMilli()
 	defer ip.IPChangedEnd()
-	if !bytes.Equal(ip.LatestIP, fakeIP) {
+	if !net.IP.Equal(ip.LatestIP, fakeIP) {
 		ip.LatestIP = fakeIP
 		return true, nil
 	}
@@ -365,7 +363,7 @@ func (ip *Extip) IPChanged() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if !bytes.Equal(ip.LatestIP, extip) {
+	if !net.IP.Equal(ip.LatestIP, extip) {
 		ip.LatestIP = extip
 		return true, nil
 	}
